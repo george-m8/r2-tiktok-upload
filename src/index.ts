@@ -1,3 +1,5 @@
+import { makeSigner } from "./signer";
+
 export interface Env {
   TOKENS_KV: KVNamespace;
   TIKTOK_CLIENT_KEY: string;
@@ -8,6 +10,10 @@ export interface Env {
   TOKEN_URL: string;
   POST_INIT_URL: string;
   POST_API_KEY?: string; // shared secret for webhook/post
+  R2_ACCESS_KEY_ID: string;
+  R2_SECRET_ACCESS_KEY: string;
+  R2_BUCKET: string;
+  CUSTOM_MEDIA_HOST: string;
 }
 
 export default {
@@ -71,22 +77,41 @@ async function callback(url: URL, env: Env) {
 }
 
 async function webhook(req: Request, env: Env) {
+  // 1) Simple auth (as you had)
   if (env.POST_API_KEY && req.headers.get("X-Api-Key") !== env.POST_API_KEY) {
     return json({ ok: false, error: "unauthorised" }, 401);
   }
 
-  const { videoUrl, caption, idempotencyKey } = await req.json().catch(() => ({}));
-  if (!videoUrl) return json({ ok: false, error: "videoUrl required" }, 400);
+  // 2) Parse body (accept id OR url/r2Url; caption + idempotencyKey optional)
+  const body = await req.json().catch(() => ({}));
+  const { id, r2Url, url, caption, idempotencyKey } = body;
 
-  // Idempotency to handle Zapier retries
+  if (!id && !r2Url && !url) {
+    return json({ ok: false, error: "Provide 'id' or 'r2Url'/'url'" }, 400);
+  }
+
+  // 3) Idempotency (keep your existing logic)
   if (idempotencyKey) {
     const existed = await env.TOKENS_KV.get(`idem:${idempotencyKey}`);
     if (existed) return json(JSON.parse(existed));
   }
 
   try {
-    const access = await getAccessToken(env);
+    // 4) Resolve to a 7-day URL on your custom domain (or pass-through if already custom)
+    const signer = makeSigner({
+      R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+      R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+      R2_BUCKET: env.R2_BUCKET,
+      CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST
+    });
 
+    const videoUrl = await signer.resolveAndSign({
+      id,
+      url: r2Url ?? url
+    });
+
+    // 5) TikTok call (unchanged except we use videoUrl from above)
+    const access = await getAccessToken(env);
     const initResp = await fetch(env.POST_INIT_URL, {
       method: "POST",
       headers: {

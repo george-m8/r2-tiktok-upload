@@ -9,5 +9,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.910.0",
+    "@aws-sdk/s3-request-presigner": "^3.910.0"
   }
 }

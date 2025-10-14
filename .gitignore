@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Wrangler secrets and local configuration
+.wrangler/
+wrangler.toml.backup
+.dev.vars
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+
+# Optional npm cache directory
+.npm
+
+# ESLint cache
+.eslintcache
+
+# Parcel cache
+.cache/
+.parcel-cache/
+
+# Next.js build output (if using)
+.next/
+
+# Nuxt.js build / generate output (if using)
+.nuxt/
+
+# Gatsby files (if using)
+.cache/
+public/
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files (if using)
+.dynamodb/
+
+# TernJS port file
+.tern-port
