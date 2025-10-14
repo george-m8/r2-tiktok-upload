@@ -1,0 +1,32 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+
+      # Push Worker secrets to Cloudflare
+      - name: Set Worker secrets
+        run: |
+          echo -n "${{ secrets.TIKTOK_CLIENT_KEY }}"     | npx wrangler secret put TIKTOK_CLIENT_KEY --yes
+          echo -n "${{ secrets.TIKTOK_CLIENT_SECRET }}"  | npx wrangler secret put TIKTOK_CLIENT_SECRET --yes
+          echo -n "${{ secrets.OAUTH_REDIRECT_URL }}"    | npx wrangler secret put OAUTH_REDIRECT_URL --yes
+          echo -n "${{ secrets.POST_API_KEY }}"          | npx wrangler secret put POST_API_KEY --yes
+
+      - name: Deploy
+        run: npx wrangler deploy --minify

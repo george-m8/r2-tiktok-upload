@@ -1,0 +1,15 @@
+name = "r2-tiktok-upload"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+[[kv_namespaces]]
+binding = "TOKENS_KV"
+id = "abd886df490549889abc5f030caeaa16"
+
+[vars]
+SCOPES = "video.upload,video.publish" # or just "video.upload"
+AUTHORIZE_URL = "https://www.tiktok.com/v2/auth/authorize/"
+TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
+POST_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+CUSTOM_MEDIA_HOST = "r2media.zerotosixtycreative.co.uk"
+R2_BUCKET = "yt-relay"
