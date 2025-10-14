@@ -1,6 +1,7 @@
 name = "r2-tiktok-upload"
 main = "src/index.ts"
 compatibility_date = "2024-10-01"
+account_id = "49ad6c25a3cdded8b74b11ec4b9fea17"
 
 [[kv_namespaces]]
 binding = "TOKENS_KV"

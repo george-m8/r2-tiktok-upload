@@ -20,18 +20,29 @@ jobs:
           node-version: 20
       - run: npm ci
 
-      # Push Worker secrets to Cloudflare
+      - name: Wrangler version
+        run: npx wrangler --version
+
+      - name: Authenticate (env for CI)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: npx wrangler whoami
+
       - name: Set Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+            npx wrangler secret put TIKTOK_CLIENT_KEY        --name r2-tiktok-upload --text "${{ secrets.TIKTOK_CLIENT_KEY }}"
+            npx wrangler secret put TIKTOK_CLIENT_SECRET     --name r2-tiktok-upload --text "${{ secrets.TIKTOK_CLIENT_SECRET }}"
+            npx wrangler secret put OAUTH_REDIRECT_URL       --name r2-tiktok-upload --text "${{ secrets.OAUTH_REDIRECT_URL }}"
+            npx wrangler secret put POST_API_KEY             --name r2-tiktok-upload --text "${{ secrets.POST_API_KEY }}"
+            npx wrangler secret put R2_ACCESS_KEY_ID         --name r2-tiktok-upload --text "${{ secrets.R2_ACCESS_KEY_ID }}"
+            npx wrangler secret put R2_SECRET_ACCESS_KEY     --name r2-tiktok-upload --text "${{ secrets.R2_SECRET_ACCESS_KEY }}"
+
+      - name: Deploy
         env:
             CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
             CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: |
-            printf "%s" "${{ secrets.TIKTOK_CLIENT_KEY }}"        | npx wrangler secret put TIKTOK_CLIENT_KEY        --config wrangler.toml --name r2-tiktok-upload
-            printf "%s" "${{ secrets.TIKTOK_CLIENT_SECRET }}"     | npx wrangler secret put TIKTOK_CLIENT_SECRET     --config wrangler.toml --name r2-tiktok-upload
-            printf "%s" "${{ secrets.OAUTH_REDIRECT_URL }}"       | npx wrangler secret put OAUTH_REDIRECT_URL       --config wrangler.toml --name r2-tiktok-upload
-            printf "%s" "${{ secrets.POST_API_KEY }}"             | npx wrangler secret put POST_API_KEY             --config wrangler.toml --name r2-tiktok-upload
-            printf "%s" "${{ secrets.R2_ACCESS_KEY_ID }}"         | npx wrangler secret put R2_ACCESS_KEY_ID         --config wrangler.toml --name r2-tiktok-upload
-            printf "%s" "${{ secrets.R2_SECRET_ACCESS_KEY }}"     | npx wrangler secret put R2_SECRET_ACCESS_KEY     --config wrangler.toml --name r2-tiktok-upload
-
-      - name: Deploy
-        run: npx wrangler deploy --minify --config wrangler.toml --name r2-tiktok-upload
+        run: npx wrangler deploy --minify
