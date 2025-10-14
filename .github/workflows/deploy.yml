@@ -23,10 +23,12 @@ jobs:
       # Push Worker secrets to Cloudflare
       - name: Set Worker secrets
         run: |
-          echo -n "${{ secrets.TIKTOK_CLIENT_KEY }}"     | npx wrangler secret put TIKTOK_CLIENT_KEY --yes
-          echo -n "${{ secrets.TIKTOK_CLIENT_SECRET }}"  | npx wrangler secret put TIKTOK_CLIENT_SECRET --yes
-          echo -n "${{ secrets.OAUTH_REDIRECT_URL }}"    | npx wrangler secret put OAUTH_REDIRECT_URL --yes
-          echo -n "${{ secrets.POST_API_KEY }}"          | npx wrangler secret put POST_API_KEY --yes
+            npx wrangler secret put TIKTOK_CLIENT_KEY --raw "${{ secrets.TIKTOK_CLIENT_KEY }}"
+            npx wrangler secret put TIKTOK_CLIENT_SECRET --raw "${{ secrets.TIKTOK_CLIENT_SECRET }}"
+            npx wrangler secret put OAUTH_REDIRECT_URL --raw "${{ secrets.OAUTH_REDIRECT_URL }}"
+            npx wrangler secret put POST_API_KEY --raw "${{ secrets.POST_API_KEY }}"
+            npx wrangler secret put R2_ACCESS_KEY_ID --raw "${{ secrets.R2_ACCESS_KEY_ID }}"
+            npx wrangler secret put R2_SECRET_ACCESS_KEY --raw "${{ secrets.R2_SECRET_ACCESS_KEY }}"
 
       - name: Deploy
         run: npx wrangler deploy --minify
