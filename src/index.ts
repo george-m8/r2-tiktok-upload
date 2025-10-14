@@ -1,3 +1,4 @@
+import "./shims";
 import { makeSigner } from "./signer";
 
 export interface Env {
