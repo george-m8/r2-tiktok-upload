@@ -22,6 +22,9 @@ jobs:
 
       # Push Worker secrets to Cloudflare
       - name: Set Worker secrets
+        env:
+            CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+            CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
             printf "%s" "${{ secrets.TIKTOK_CLIENT_KEY }}"        | npx wrangler secret put TIKTOK_CLIENT_KEY        --config wrangler.toml --name r2-tiktok-upload
             printf "%s" "${{ secrets.TIKTOK_CLIENT_SECRET }}"     | npx wrangler secret put TIKTOK_CLIENT_SECRET     --config wrangler.toml --name r2-tiktok-upload
