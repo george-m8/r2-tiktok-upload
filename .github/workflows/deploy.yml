@@ -17,6 +17,15 @@ jobs:
       - name: Show Wrangler version
         run: npx wrangler --version
 
+      - name: Auth check
+        env:
+          CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          echo "Account: $CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "CF API token missing" && exit 1)
+          npx wrangler whoami
+
       # Set secrets via STDIN (works on v3/v4)
       - name: Set Worker secrets
         env:
@@ -29,15 +38,6 @@ jobs:
           printf "%s" "${{ secrets.POST_API_KEY }}"         | npx wrangler secret put POST_API_KEY         --name r2-tiktok-upload --config wrangler.toml
           printf "%s" "${{ secrets.R2_ACCESS_KEY_ID }}"     | npx wrangler secret put R2_ACCESS_KEY_ID     --name r2-tiktok-upload --config wrangler.toml
           printf "%s" "${{ secrets.R2_SECRET_ACCESS_KEY }}" | npx wrangler secret put R2_SECRET_ACCESS_KEY --name r2-tiktok-upload --config wrangler.toml
-
-      - name: Auth check
-        env:
-          CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: |
-          echo "Account: $CLOUDFLARE_ACCOUNT_ID"
-          test -n "$CLOUDFLARE_API_TOKEN" || (echo "CF API token missing" && exit 1)
-          npx wrangler whoami
 
       - name: Deploy
         env:
