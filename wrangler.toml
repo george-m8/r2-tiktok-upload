@@ -7,6 +7,10 @@ account_id = "49ad6c25a3cdded8b74b11ec4b9fea17"
 binding = "TOKENS_KV"
 id = "abd886df490549889abc5f030caeaa16"
 
+[triggers]
+# Every day at 05:00 UTC
+crons = ["0 5 * * *"]
+
 [vars]
 SCOPES = "video.upload,video.publish" # or just "video.upload"
 AUTHORIZE_URL = "https://www.tiktok.com/v2/auth/authorize/"
@@ -14,21 +18,15 @@ TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 POST_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
 CUSTOM_MEDIA_HOST = "r2media.zerotosixtycreative.co.uk"
 R2_BUCKET = "yt-relay"
-
-[observability]
-[observability.logs]
-enabled = true
-head_sampling_rate = 1
-invocation_logs = true
-
-[triggers]
-# Every day at 05:00 UTC
-crons = ["0 5 * * *"]
-
-[vars]
 # Safety: start with "true" so it only logs what it *would* delete.
 PURGE_DRY_RUN = "true"
 # Pending keys older than this (hours) will be purged.
 PURGE_PENDING_MAX_HOURS = "24"
 # Toggle unmatched-active cleanup
 PURGE_REMOVE_UNMATCHED = "true"
+
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
