@@ -20,10 +20,22 @@ export interface Env {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
+
     if (url.pathname === "/login") return login(url, env);
     if (url.pathname === "/callback") return callback(url, env);
     if (url.pathname === "/webhook" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
+
+    // 👇 Add this block here
+    if (url.pathname === "/debug-auth") {
+      return new Response(JSON.stringify({
+        redirect_uri: env.OAUTH_REDIRECT_URL,
+        authorize_url: env.AUTHORIZE_URL,
+      }, null, 2), {
+        headers: { "content-type": "application/json" }
+      });
+    }
+
     return new Response("ok");
   }
 };
