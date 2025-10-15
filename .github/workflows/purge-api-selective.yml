@@ -1,102 +1,83 @@
-name: Purge API tokens (pending and/or unmatched)
+name: Purge Selective API Tokens
 on:
   workflow_dispatch:
     inputs:
-      purge_pending:
-        description: "Delete tokens with status=pending"
-        required: true
-        default: "true"
-        type: choice
-        options: ["true","false"]
-      purge_unmatched:
-        description: "Delete active tokens with no tok:open:<open_id>"
-        required: true
-        default: "true"
-        type: choice
-        options: ["true","false"]
       dry_run:
-        description: "Dry run (preview only)"
+        description: "Preview only (true = don't delete)"
         required: true
         default: "true"
-        type: choice
-        options: ["true","false"]
 
 jobs:
-  purge:
+  purge_selective:
     runs-on: ubuntu-latest
     env:
-      CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-      KV_NS_ID:              ${{ secrets.KV_NS_ID_TOKENS }}
-      DO_PENDING:            ${{ github.event.inputs.purge_pending }}
-      DO_UNMATCHED:          ${{ github.event.inputs.purge_unmatched }}
-      DRY_RUN:               ${{ github.event.inputs.dry_run }}
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      KV_NS_ID: ${{ secrets.KV_NS_ID_TOKENS }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-
-      - name: Wrangler version
-        run: npx wrangler@latest --version
-
-      - name: Scan and (maybe) delete
+      - name: Purge pending/unmatched keys
         shell: bash
         run: |
           set -euo pipefail
-          echo "Namespace: $KV_NS_ID"
-          echo "Options: pending=$DO_PENDING, unmatched=$DO_UNMATCHED, dry_run=$DRY_RUN"
 
-          api_keys=$(npx wrangler@latest kv key list \
-            --namespace-id "$KV_NS_ID" \
-            --prefix "api:" | jq -r '.[].name')
+          echo "Namespace: $KV_NS_ID"
+          echo "Dry run: $DRY_RUN"
+
+          api_keys=$(curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/keys?prefix=api%3A&limit=1000" \
+            | jq -r '.result[].name')
 
           if [ -z "${api_keys:-}" ]; then
             echo "No api:* keys found."
             exit 0
           fi
 
-          to_delete=""
+          to_delete=()
 
-          while IFS= read -r key; do
-            [ -z "$key" ] && continue
-            val=$(npx wrangler@latest kv key get "$key" --namespace-id "$KV_NS_ID" || true)
+          for key in $api_keys; do
+            val=$(curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/values/$key" \
+              || echo "")
             [ -z "$val" ] && continue
 
             status=$(echo "$val" | jq -r '.status // empty')
             open_id=$(echo "$val" | jq -r '.open_id // empty')
 
-            # pending
-            if [ "$DO_PENDING" = "true" ] && [ "$status" = "pending" ]; then
-              to_delete+="$key"$'\n'
+            if [ "$status" = "pending" ]; then
+              to_delete+=("$key")
               continue
             fi
 
-            # unmatched active
-            if [ "$DO_UNMATCHED" = "true" ] && [ "$status" = "active" ] && [ -n "$open_id" ]; then
-              tok_key="tok:open:$open_id"
-              tok_val=$(npx wrangler@latest kv key get "$tok_key" --namespace-id "$KV_NS_ID" || true)
+            if [ "$status" = "active" ] && [ -n "$open_id" ]; then
+              tok_val=$(curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/values/tok:open:$open_id" \
+                || echo "")
               if [ -z "$tok_val" ]; then
-                to_delete+="$key"$'\n'
+                to_delete+=("$key")
               fi
             fi
-          done <<< "$api_keys"
+          done
 
-          if [ -z "${to_delete:-}" ]; then
-            echo "Nothing to delete under the given criteria."
+          if [ "${#to_delete[@]}" -eq 0 ]; then
+            echo "Nothing to delete."
             exit 0
           fi
 
-          echo "Keys to delete:"
-          printf '%s\n' "$to_delete"
+          echo "Keys to delete (${#to_delete[@]}):"
+          printf '%s\n' "${to_delete[@]}"
 
           if [ "$DRY_RUN" = "true" ]; then
-            echo "Dry run: not deleting."
+            echo "Dry run: skipping delete."
             exit 0
           fi
 
-          echo "Deleting…"
-          while IFS= read -r key; do
-            [ -z "$key" ] && continue
-            npx wrangler@latest kv key delete "$key" --namespace-id "$KV_NS_ID"
-          done <<< "$to_delete"
+          echo "Deleting..."
+          for key in "${to_delete[@]}"; do
+            echo "Deleting $key"
+            curl -sS -X DELETE -H "Authorization: Bearer $CF_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/values/$key" \
+              >/dev/null
+          done
 
           echo "Done."
