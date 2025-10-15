@@ -14,3 +14,9 @@ TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 POST_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
 CUSTOM_MEDIA_HOST = "r2media.zerotosixtycreative.co.uk"
 R2_BUCKET = "yt-relay"
+
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
