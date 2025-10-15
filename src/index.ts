@@ -10,7 +10,7 @@ export interface Env {
   AUTHORIZE_URL: string;
   TOKEN_URL: string;
   POST_INIT_URL: string;
-  POST_API_KEY?: string; // shared secret for webhook/post
+  POST_API_KEY?: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET: string;
