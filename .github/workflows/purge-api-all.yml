@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
 
           echo "Listing api:* from namespace: $KV_NS_ID"
-          keys=$(npx wrangler@latest kv:key list \
+          keys=$(npx wrangler@latest kv key list \
             --namespace-id "$KV_NS_ID" \
             --prefix "api:" | jq -r '.[].name')
 
@@ -34,7 +34,7 @@ jobs:
           echo "Deleting $(printf '%s\n' "$keys" | wc -l) keys…"
           while IFS= read -r key; do
             [ -z "$key" ] && continue
-            npx wrangler@latest kv:key delete "$key" --namespace-id "$KV_NS_ID"
+            npx wrangler@latest kv key delete "$key" --namespace-id "$KV_NS_ID"
           done <<< "$keys"
 
           echo "Done."

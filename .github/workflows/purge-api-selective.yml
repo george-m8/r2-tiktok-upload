@@ -45,7 +45,7 @@ jobs:
           echo "Namespace: $KV_NS_ID"
           echo "Options: pending=$DO_PENDING, unmatched=$DO_UNMATCHED, dry_run=$DRY_RUN"
 
-          api_keys=$(npx wrangler@latest kv:key list \
+          api_keys=$(npx wrangler@latest kv key list \
             --namespace-id "$KV_NS_ID" \
             --prefix "api:" | jq -r '.[].name')
 
@@ -58,7 +58,7 @@ jobs:
 
           while IFS= read -r key; do
             [ -z "$key" ] && continue
-            val=$(npx wrangler@latest kv:key get "$key" --namespace-id "$KV_NS_ID" || true)
+            val=$(npx wrangler@latest kv key get "$key" --namespace-id "$KV_NS_ID" || true)
             [ -z "$val" ] && continue
 
             status=$(echo "$val" | jq -r '.status // empty')
@@ -73,7 +73,7 @@ jobs:
             # unmatched active
             if [ "$DO_UNMATCHED" = "true" ] && [ "$status" = "active" ] && [ -n "$open_id" ]; then
               tok_key="tok:open:$open_id"
-              tok_val=$(npx wrangler@latest kv:key get "$tok_key" --namespace-id "$KV_NS_ID" || true)
+              tok_val=$(npx wrangler@latest kv key get "$tok_key" --namespace-id "$KV_NS_ID" || true)
               if [ -z "$tok_val" ]; then
                 to_delete+="$key"$'\n'
               fi
@@ -96,7 +96,7 @@ jobs:
           echo "Deleting…"
           while IFS= read -r key; do
             [ -z "$key" ] && continue
-            npx wrangler@latest kv:key delete "$key" --namespace-id "$KV_NS_ID"
+            npx wrangler@latest kv key delete "$key" --namespace-id "$KV_NS_ID"
           done <<< "$to_delete"
 
           echo "Done."
