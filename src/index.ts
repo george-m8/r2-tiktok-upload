@@ -30,6 +30,7 @@ export default {
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/keys/new" && req.method === "GET") return newKeyForm();
     if (url.pathname === "/keys/new" && req.method === "POST") return createKey(req, env);
+    if (url.pathname === "/health") return json({ ok: true });
 
     if (url.pathname === "/debug-auth") {
       return new Response(JSON.stringify({
@@ -124,7 +125,10 @@ function newKeyForm() {
   return html(page);
 }
 
-async function createKey(_req: Request, env: Env) {
+async function createKey(req: Request, env: Env) {
+  const ip = getClientIp(req);
+  const rl = await enforceRate(env, `rk:newkey:${ip}`, 5, 3600);
+  if (!rl.allowed) return ratelimitedJson(rl);
   const raw = await mintApiToken();
   const hash = await sha256Base64Url(raw);
   const showId = crypto.randomUUID();
@@ -175,7 +179,7 @@ function connectedSuccessPage() {
 <body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
   <div class="bg-white p-8 rounded-2xl shadow text-center max-w-md w-full">
     <h1 class="text-2xl font-bold text-brandred">🎉 Connected to TikTok!</h1>
-    <p class="mt-3 text-black/70">Your TikTok account is now linked. You can safely close this window or create another API key.</p>
+    <p class="mt-3 text-black/70">Your TikTok account is now linked. You can safely close this window after putting your API key somewhere safe.</p>
     <div class="mt-6">
       <a href="${SITE_HOME}" class="rounded bg-brandred text-white px-4 py-2">Back to home</a>
     </div>
@@ -285,21 +289,13 @@ function renderCallbackPage(
   return html(markup, status);
 }
 
-// tiny HTML escaper for details block
-function escapeHtml(s = "") {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 async function webhook(req: Request, env: Env) {
   // API key auth (no usernames)
   const apiKey = req.headers.get("X-Api-Key") || "";
   if (!apiKey) return json({ ok:false, error:"missing X-Api-Key" }, 401);
   const hash = await sha256Base64Url(apiKey);
+  const rl = await enforceRate(env, `rk:webhook:${hash}`, 60, 60);
+  if (!rl.allowed) return ratelimitedJson(rl);
   const apiMetaRaw = await env.TOKENS_KV.get(`api:${hash}`);
   if (!apiMetaRaw) return json({ ok:false, error:"unauthorised" }, 401);
   const apiMeta = tryParse(apiMetaRaw) || {};
@@ -438,4 +434,49 @@ function tryParse(s: string) {
 }
 async function safeText(r: Response) {
   try { return await r.text(); } catch { return ""; }
+}
+
+// ---- Rate limit helper (KV-based, fixed window) ----
+async function enforceRate(
+  env: Env,
+  key: string,       // e.g. "rk:newkey:IP"
+  limit: number,     // max requests per window
+  windowSec: number  // window size in seconds (e.g. 3600 = 1h)
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  const now = Math.floor(Date.now() / 1000);
+  const windowKey = `${key}:${Math.floor(now / windowSec)}`; // e.g. rk:newkey:1.2.3.4:451234
+  const raw = await env.TOKENS_KV.get(windowKey);
+  const count = raw ? parseInt(raw, 10) : 0;
+
+  if (count >= limit) {
+    const resetAt = (Math.floor(now / windowSec) + 1) * windowSec;
+    return { allowed: false, remaining: 0, resetAt };
+  }
+
+  // Increment (best-effort; KV is eventually consistent, but good enough here)
+  await env.TOKENS_KV.put(windowKey, String(count + 1), { expirationTtl: windowSec });
+  const resetAt = (Math.floor(now / windowSec) + 1) * windowSec;
+  return { allowed: true, remaining: Math.max(0, limit - (count + 1)), resetAt };
+}
+
+// Helper to extract client IP (works on Workers)
+function getClientIp(req: Request) {
+  return req.headers.get("CF-Connecting-IP") || "0.0.0.0";
+}
+
+function ratelimitedJson(limitInfo: { remaining: number; resetAt: number }) {
+  const retryAfter = Math.max(0, limitInfo.resetAt - Math.floor(Date.now() / 1000));
+  return new Response(JSON.stringify({
+    ok: false,
+    error: "rate_limited",
+    message: "Too many requests. Please try again later."
+  }, null, 2), {
+    status: 429,
+    headers: {
+      "content-type": "application/json",
+      "retry-after": String(retryAfter),
+      "x-rate-remaining": String(limitInfo.remaining),
+      "x-rate-reset": String(limitInfo.resetAt)
+    }
+  });
 }
