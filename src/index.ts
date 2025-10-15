@@ -27,12 +27,10 @@ export default {
     if (url.pathname === "/login") return login(url, env);
     if (url.pathname === "/callback") return callback(url, env);
     if (url.pathname === "/connected-success") return connectedSuccessPage(); 
-    if (url.pathname === "/webhook" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/keys/new" && req.method === "GET") return newKeyForm();
     if (url.pathname === "/keys/new" && req.method === "POST") return createKey(req, env);
     if (url.pathname === "/health") return json({ ok: true });
-
     if (url.pathname === "/webhook" && req.method === "POST") {
       const dry = url.searchParams.get("dry") === "1" || req.headers.get("X-Dry-Run") === "1";
       return webhook(req, env, { dry });
