@@ -76,8 +76,13 @@ async function mintApiToken() {
 }
 
 async function login(url: URL, env: Env) {
+  const show = url.searchParams.get("show") || "";
+  if (!show) {
+    // No one-time key in play → send them to create one first
+    return Response.redirect("/keys/new", 302);
+  }
+
   const state = crypto.randomUUID();
-  const show = url.searchParams.get("show") || ""; // from /keys/new page
   await env.TOKENS_KV.put(`state:${state}`, JSON.stringify({ show }), { expirationTtl: 300 });
 
   const auth = new URL(env.AUTHORIZE_URL);
@@ -101,10 +106,10 @@ function newKeyForm() {
   <form method="POST" class="w-full max-w-md bg-white rounded-2xl p-6 shadow">
     <div class="flex items-center justify-between mb-3">
       <h1 class="text-2xl font-bold">Create your API key</h1>
-      <a href="${SITE_HOME}" class="text-sm text-brandred hover:underline">Back to site</a>
     </div>
     <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
     <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
+    <a href="${SITE_HOME}" class="text-sm text-brandred hover:underline">Back to site</a>
   </form>
 
   <script>
