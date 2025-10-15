@@ -26,7 +26,6 @@ export default {
     if (url.pathname === "/webhook" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
 
-    // 👇 Add this block here
     if (url.pathname === "/debug-auth") {
       return new Response(JSON.stringify({
         redirect_uri: env.OAUTH_REDIRECT_URL,
@@ -97,7 +96,8 @@ async function webhook(req: Request, env: Env) {
 
   // 2) Parse body (accept id OR url/r2Url; caption + idempotencyKey optional)
   const body = await req.json().catch(() => ({}));
-  const { id, r2Url, url, caption, idempotencyKey } = body;
+  const { id, r2Url, url, caption, idempotencyKey, mode } = body;
+  const publishMode = (mode ?? "publish").toLowerCase(); // "publish" | "draft"
 
   if (!id && !r2Url && !url) {
     return json({ ok: false, error: "Provide 'id' or 'r2Url'/'url'" }, 400);
@@ -123,34 +123,59 @@ async function webhook(req: Request, env: Env) {
       url: r2Url ?? url
     });
 
-    // 5) TikTok call (unchanged except we use videoUrl from above)
+    // 5) TikTok call (build post_info from mode)
     const access = await getAccessToken(env);
+
+    // Force private in unaudited/sandbox; allow a draft toggle
+    const post_info: Record<string, any> = {
+      title: caption ?? "",
+      privacy_level: "SELF_ONLY", // required for unaudited clients
+    };
+    if (publishMode === "draft") {
+      post_info.is_draft = true; // harmless if the tenant ignores it
+    }
+
     const initResp = await fetch(env.POST_INIT_URL, {
       method: "POST",
       headers: {
-        "authorization": `Bearer ${access}`,
-        "content-type": "application/json"
+        authorization: `Bearer ${access}`,
+        "content-type": "application/json",
       },
       body: JSON.stringify({
-        post_info: { title: caption ?? "" },
-        source_info: { source: "PULL_FROM_URL", video_url: videoUrl }
-      })
+        post_info,
+        source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
+      }),
     });
 
     const bodyText = await safeText(initResp);
     const payload = tryParse(bodyText);
-    const success = initResp.ok;
 
-    const result = {
-      ok: success,
-      status: success ? "accepted" : "failed",
-      tiktok: payload || bodyText
-    };
+    let result: any;
+    if (initResp.ok) {
+      result = {
+        ok: true,
+        status: publishMode === "draft" ? "draft_accepted" : "accepted",
+        tiktok: payload ?? { raw: bodyText },
+      };
+    } else {
+      const err = payload?.error ?? payload ?? { message: bodyText };
+      result = {
+        ok: false,
+        status: "failed",
+        error: {
+          code: err.code ?? "unknown_error",
+          message: err.message ?? String(bodyText),
+          log_id: payload?.log_id,
+        },
+      };
+    }
 
     if (idempotencyKey) {
-      await env.TOKENS_KV.put(`idem:${idempotencyKey}`, JSON.stringify(result), { expirationTtl: 86400 });
+      await env.TOKENS_KV.put(`idem:${idempotencyKey}`, JSON.stringify(result), {
+        expirationTtl: 86400,
+      });
     }
-    return json(result, success ? 200 : 400);
+    return json(result, initResp.ok ? 200 : 400);
   } catch (err: any) {
     const result = { ok: false, error: String(err) };
     if (idempotencyKey) {
