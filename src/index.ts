@@ -1,5 +1,6 @@
 import "./shims";
 import { makeSigner } from "./signer";
+import type { ScheduledController, ExecutionContext } from '@cloudflare/workers-types';
 
 export interface Env {
   TOKENS_KV: KVNamespace;
@@ -44,7 +45,7 @@ export default {
     return new Response("ok");
   },
 
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(purgeSelective(env));
   }
 };
