@@ -6,29 +6,23 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     env:
-      CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-      KV_NS_ID:              ${{ secrets.KV_NS_ID_TOKENS }}   # <-- prod namespace id
-      KV_NS_ID_PREVIEW:      ${{ secrets.KV_NS_ID_TOKENS_PREVIEW || '' }}  # optional
+      CF_API_TOKEN:   ${{ secrets.CF_API_TOKEN }}
+      CF_ACCOUNT_ID:  ${{ secrets.CF_ACCOUNT_ID }}
+      KV_NS_ID:       ${{ secrets.KV_NS_ID_TOKENS }}
     steps:
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-
-      - name: Wrangler version
-        run: npx wrangler@latest --version
-
-      - name: List KV namespaces (sanity check)
-        run: npx wrangler@latest kv namespace list
-
-      - name: Try listing keys (PROD, no prefix)
-        run: npx wrangler@latest kv key list --namespace-id "$KV_NS_ID" | head -n 200
-
-      - name: Try listing keys (PROD, with 'api:' prefix)
-        run: npx wrangler@latest kv key list --namespace-id "$KV_NS_ID" --prefix "api:" | head -n 200
-
-      - name: Try listing keys (PREVIEW, if provided)
-        if: env.KV_NS_ID_PREVIEW != ''
+      - name: Show inputs
         run: |
-          echo "Preview namespace: $KV_NS_ID_PREVIEW"
-          npx wrangler@latest kv key list --namespace-id "$KV_NS_ID_PREVIEW" | head -n 200
-          npx wrangler@latest kv key list --namespace-id "$KV_NS_ID_PREVIEW" --prefix "api:" | head -n 200
+          echo "Account: $CF_ACCOUNT_ID"
+          echo "Namespace: $KV_NS_ID"
+      - name: List namespaces (sanity)
+        run: |
+          curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces" | jq .
+      - name: List ALL keys (first 200) for this namespace
+        run: |
+          curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/keys?limit=200" | jq .
+      - name: List api:* keys (first 200)
+        run: |
+          curl -sS -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$KV_NS_ID/keys?prefix=api%3A&limit=200" | jq .
