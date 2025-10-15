@@ -110,7 +110,9 @@ function newKeyForm() {
     </div>
     <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
     <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
-    <a href="${SITE_HOME}" class="text-sm text-center text-brandred  hover:underline">Back to site</a>
+    <div class="flex items-center justify-center mt-2">
+      <a href="${SITE_HOME}" class="text-sm text-center text-brandred  hover:underline">Back to site</a>
+    </div>
   </form>
 
   <script>
