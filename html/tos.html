@@ -4,10 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terms of Service - R2 TikTok Upload</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+        extend: {
+            colors: {
+            offwhite: '#fdf7ed',
+            brandred: '#e6372e'
+            },
+            fontFamily: {
+            sans: ['Inter','system-ui','-apple-system','Segoe UI','Roboto','Helvetica','Arial','sans-serif']
+            },
+            boxShadow: {
+            soft: '0 10px 30px rgba(0,0,0,0.06)'
+            }
+        }
+        }
+    }
+    </script>
 </head>
 <body class="bg-gray-50 text-gray-800 p-8 max-w-3xl mx-auto">
-  <h1 class="text-3xl font-bold mb-6">Terms of Service</h1>
+  <h1 class="text-3xl mb-6">Terms of Service</h1>
   <p class="mb-4">
     By using this service, you agree that you are authorising R2 TikTok Upload to upload content to TikTok
     on your behalf, using TikTok’s official Open API. This service does not store your personal data or media,
@@ -20,6 +38,6 @@
   <p class="mb-4">
     This service is provided “as is” without any guarantees or warranties of any kind.
   </p>
-  <a href="/" class="text-pink-500 underline">← Back to home</a>
+  <a href="/" class="text-brandred underline">← Back to home</a>
 </body>
 </html>

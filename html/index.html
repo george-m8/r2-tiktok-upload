@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>R2 TikTok Upload</title>
+
+  <!-- Tailwind CDN + inline config (no separate CSS needed) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            offwhite: '#fdf7ed',
+            brandred: '#e6372e'
+          },
+          fontFamily: {
+            sans: ['Inter','system-ui','-apple-system','Segoe UI','Roboto','Helvetica','Arial','sans-serif']
+          },
+          boxShadow: {
+            soft: '0 10px 30px rgba(0,0,0,0.06)'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="bg-offwhite text-[#1a1a1a] font-sans flex min-h-screen flex-col">
+  <header class="w-full">
+    <div class="mx-auto max-w-6xl px-6 py-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="img/logo.svg" alt="R2 TikTok Upload Logo" class="h-9 w-auto"/>
+        <span class="text-lg font-semibold tracking-tight">R2 TikTok Upload</span>
+      </div>
+      <a href="https://r2-tiktok-upload.george-49a.workers.dev/login"
+         class="inline-flex items-center gap-2 rounded-lg bg-brandred px-4 py-2 text-white shadow-soft hover:opacity-90 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.314 0-10 1.657-10 4.971V24h20v-1.029C22 19.657 15.314 18 12 18Zm7-9V6h-2V4h2V2h2v2h2v2h-2v2h-2Z"/></svg>
+        Grant TikTok Access
+      </a>
+    </div>
+  </header>
+
+  <main class="flex-1">
+    <section class="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 py-10 md:grid-cols-2 md:items-center">
+      <!-- Left: copy -->
+      <div>
+        <h1 class="text-4xl md:text-5xl font-extrabold leading-tight">
+          Send videos from <span class="text-brandred">R2</span> to TikTok — fast.
+        </h1>
+        <p class="mt-5 text-lg leading-relaxed text-black/70">
+          This tool signs your R2 video on your verified media domain and posts it to your TikTok account
+          via TikTok’s official Open API. Choose <span class="font-semibold">publish</span> or
+          <span class="font-semibold">draft</span> per request. In sandbox, posts are private by design.
+        </p>
+
+        <ul class="mt-6 space-y-3 text-black/80">
+          <li class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-2 w-2 rounded-full bg-brandred"></span>
+            Accepts either an <code class="rounded bg-black/5 px-1 py-0.5">id</code> (maps to <code>id.mp4</code>)
+            or a full <code class="rounded bg-black/5 px-1 py-0.5">r2Url</code>.
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-2 w-2 rounded-full bg-brandred"></span>
+            Generates a 7-day presigned URL on your custom media domain (TikTok-verified).
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-2 w-2 rounded-full bg-brandred"></span>
+            Idempotent requests — safe with Zapier retries.
+          </li>
+        </ul>
+
+        <div class="mt-8 flex flex-wrap items-center gap-3">
+          <a href="https://r2-tiktok-upload.george-49a.workers.dev/login"
+             class="rounded-lg bg-brandred px-5 py-3 text-white shadow-soft hover:opacity-90 transition">Connect TikTok</a>
+          <a href="#api" class="rounded-lg border border-brandred px-5 py-3 text-brandred hover:bg-brandred/5 transition">See API</a>
+        </div>
+
+        <p class="mt-6 text-sm text-black/60">
+          Need help? See <a href="tos.html" class="underline">Terms</a> &nbsp;·&nbsp;
+          <a href="privacy-policy.html" class="underline">Privacy</a>
+        </p>
+      </div>
+
+      <!-- Right: illustration -->
+      <div class="relative">
+        <!-- Put your new illustration here -->
+        <img src="img/upload_success.svg" alt="Upload from R2 to TikTok" class="w-full max-w-xl mx-auto drop-shadow"/>
+      </div>
+    </section>
+
+    <!-- API section -->
+    <section id="api" class="border-t border-black/10 bg-white">
+      <div class="mx-auto max-w-6xl px-6 py-12">
+        <h2 class="text-3xl font-bold">API quickstart</h2>
+        <p class="mt-3 text-black/70">
+          POST a JSON payload to your Worker’s webhook. Hover (or tap) the cards to view the typical response.
+        </p>
+
+        <div class="mt-8 grid gap-8 md:grid-cols-2">
+          <!-- Example 1: publish by ID (tabs) -->
+          <div class="w-full rounded-xl bg-offwhite p-5 shadow-soft">
+            <div class="mb-3 inline-flex items-center gap-2 rounded bg-brandred/10 px-3 py-1 text-sm font-medium text-brandred">
+              Publish by ID
+            </div>
+
+            <!-- Tabs -->
+            <div class="mb-3 flex items-center gap-2 border-b border-black/10" data-code-tabs>
+              <button class="tab-btn active border-b-2 border-brandred px-3 py-2 text-sm font-medium text-brandred" data-tab="req-1">Request</button>
+              <button class="tab-btn px-3 py-2 text-sm font-medium text-black/60 hover:text-black/80" data-tab="res-1">Response</button>
+            </div>
+
+            <!-- Panels -->
+            <div class="tab-panel" id="req-1">
+              <pre class="overflow-x-auto rounded-lg bg-black/90 p-4 text-[13px] leading-relaxed text-[#f5f5f5]"><code>{
+  "id": "my-video-123",
+  "caption": "Hello TikTok",
+  "mode": "publish",
+  "idempotencyKey": "{{$guid}}"
+}</code></pre>
+            </div>
+
+            <div class="tab-panel hidden" id="res-1">
+              <pre class="overflow-x-auto rounded-lg bg-black/90 p-4 text-[13px] leading-relaxed text-[#d1fae5]"><code>{
+  "ok": true,
+  "status": "accepted",
+  "tiktok": {
+    "data": { "publish_id": "xxxx", "request_id": "..." }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <!-- Example 2: draft by r2Url (tabs) -->
+          <div class="w-full rounded-xl bg-offwhite p-5 shadow-soft">
+            <div class="mb-3 inline-flex items-center gap-2 rounded bg-brandred/10 px-3 py-1 text-sm font-medium text-brandred">
+              Draft by r2Url
+            </div>
+
+            <!-- Tabs -->
+            <div class="mb-3 flex items-center gap-2 border-b border-black/10" data-code-tabs>
+              <button class="tab-btn active border-b-2 border-brandred px-3 py-2 text-sm font-medium text-brandred" data-tab="req-2">Request</button>
+              <button class="tab-btn px-3 py-2 text-sm font-medium text-black/60 hover:text-black/80" data-tab="res-2">Response</button>
+            </div>
+
+            <!-- Panels -->
+            <div class="tab-panel" id="req-2">
+              <pre class="overflow-x-auto rounded-lg bg-black/90 p-4 text-[13px] leading-relaxed text-[#f5f5f5]"><code>{
+  "r2Url": "https://&lt;acct&gt;.r2.cloudflarestorage.com/&lt;bucket&gt;/clip.mp4?...",
+  "caption": "Save as draft",
+  "mode": "draft",
+  "idempotencyKey": "{{$guid}}"
+}</code></pre>
+            </div>
+
+            <div class="tab-panel hidden" id="res-2">
+              <pre class="overflow-x-auto rounded-lg bg-black/90 p-4 text-[13px] leading-relaxed text-[#fee2e2]"><code>{
+  "ok": true,
+  "status": "draft_accepted",
+  "tiktok": {
+    "data": { "publish_id": "xxxx", "request_id": "..." }
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center py-6 text-sm text-black/60">
+    &copy; 2025 R2Media · <a href="tos.html" class="underline">Terms</a> · <a href="privacy-policy.html" class="underline">Privacy</a>
+  </footer>
+
+  <script>
+    // simple tabs: works for any container with [data-code-tabs]
+    document.querySelectorAll('[data-code-tabs]').forEach(group => {
+      const buttons = group.querySelectorAll('.tab-btn');
+      const ids = [...buttons].map(b => b.dataset.tab);
+      const panels = ids.map(id => document.getElementById(id));
+      
+      group.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab-btn');
+        if (!btn) return;
+        
+        // active styles
+        buttons.forEach(b => b.classList.remove('active','border-brandred','text-brandred','border-b-2'));
+        buttons.forEach(b => b.classList.add('text-black/60'));
+        btn.classList.add('active','border-brandred','text-brandred','border-b-2');
+        btn.classList.remove('text-black/60');
+
+        // show/hide panels
+        panels.forEach(p => p.classList.add('hidden'));
+        const panel = document.getElementById(btn.dataset.tab);
+        if (panel) panel.classList.remove('hidden');
+      });
+    });
+  </script>
+</body>
+</html>
