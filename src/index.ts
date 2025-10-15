@@ -162,7 +162,6 @@ function renderCallbackPage(
 
     <div class="mt-6 flex flex-col items-center gap-2">
       <button id="closeBtn" class="rounded-lg bg-brandred px-4 py-2 text-white hover:opacity-90 transition">Close</button>
-      <p class="text-xs text-black/50">This window will close automatically.</p>
     </div>
   </div>
 
