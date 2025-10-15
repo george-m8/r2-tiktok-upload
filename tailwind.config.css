@@ -1,0 +1,22 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./*.html",          // scan your top-level HTML pages
+    "./**/*.html"        // include any nested pages if you add more later
+  ],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          pink: "#EE1D52",  // TikTok’s accent pink
+          teal: "#69C9D0",  // TikTok’s cyan
+          dark: "#010101",  // near-black background option
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+    },
+  },
+  plugins: [],
+}
