@@ -33,6 +33,28 @@ export default {
     if (url.pathname === "/keys/new" && req.method === "POST") return createKey(req, env);
     if (url.pathname === "/health") return json({ ok: true });
 
+    if (url.pathname === "/webhook" && req.method === "POST") {
+      const dry = url.searchParams.get("dry") === "1" || req.headers.get("X-Dry-Run") === "1";
+      return webhook(req, env, { dry });
+    }
+
+    if (url.pathname === "/preflight" && req.method === "POST") {
+      const { testUrl } = await req.json().catch(() => ({}));
+      if (!testUrl) return json({ ok:false, error:"missing testUrl" }, 400);
+      const head = await fetch(testUrl, { method: "HEAD" });  // ok if 403, we’ll try range GET too
+      const range = await fetch(testUrl, { headers: { Range: "bytes=0-0" }});
+      return json({
+        ok: (head.ok || range.status === 206),
+        head: {
+          status: head.status,
+          "content-type": head.headers.get("content-type"),
+          "content-length": head.headers.get("content-length"),
+          "accept-ranges": head.headers.get("accept-ranges")
+        },
+        range: { status: range.status }
+      });
+    }
+
     if (url.pathname === "/debug-auth") {
       return new Response(JSON.stringify({
         redirect_uri: env.OAUTH_REDIRECT_URL,
@@ -362,7 +384,7 @@ function renderCallbackPage(
   return html(markup, status);
 }
 
-async function webhook(req: Request, env: Env) {
+async function webhook(req: Request, env: Env, opts: { dry?: boolean } = {}) {
   // API key auth (no usernames)
   const apiKey = req.headers.get("X-Api-Key") || "";
   if (!apiKey) return json({ ok:false, error:"missing X-Api-Key" }, 401);
@@ -380,7 +402,7 @@ async function webhook(req: Request, env: Env) {
   // 2) Parse body (accept id OR url/r2Url; caption + idempotencyKey optional)
   const body = await req.json().catch(() => ({}));
   const { id, r2Url, url, caption, idempotencyKey, mode } = body;
-  const publishMode = (mode ?? "publish").toLowerCase(); // "publish" | "draft"
+  const publishMode = (mode ?? "publish").toLowerCase();
 
   if (!id && !r2Url && !url) {
     return json({ ok: false, error: "Provide 'id' or 'r2Url'/'url'" }, 400);
@@ -394,6 +416,7 @@ async function webhook(req: Request, env: Env) {
 
   try {
     // 4) Resolve to a 7-day URL on your custom domain (or pass-through if already custom)
+    // build the signed URL up front
     const signer = makeSigner({
       R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
       R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
@@ -401,26 +424,30 @@ async function webhook(req: Request, env: Env) {
       CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST
     });
 
-    const videoUrl = await signer.resolveAndSign({
-      id,
-      url: r2Url ?? url
-    });
+    const videoUrl = await signer.resolveAndSign({ id, url: r2Url ?? url });
 
     // 5) TikTok call (build post_info from mode)
     const access = await getAccessTokenFor(env, `tok:open:${openId}`);
 
-    // Force private in unaudited/sandbox; allow a draft toggle
     const post_info: Record<string, any> = {
       title: caption ?? "",
-      privacy_level: "SELF_ONLY", // required for unaudited clients
+      privacy_level: "SELF_ONLY",
       disable_duet: false,
       disable_stitch: false,
       disable_comment: false,
       brand_content_toggle: false,
-      brand_organic_toggle: false
+      brand_organic_toggle: false,
+      ...(publishMode === "draft" ? { is_draft: true } : {})
     };
-    if (publishMode === "draft") {
-      post_info.is_draft = true; // harmless if the tenant ignores it
+    const source_info = { source: "PULL_FROM_URL", video_url: videoUrl };
+
+    if (opts.dry) {
+      // Don’t call TikTok—just show what we’d send
+      return json({
+        ok: true,
+        dryRun: true,
+        request: { post_info, source_info }
+      });
     }
 
     const initResp = await fetch(env.POST_INIT_URL, {
