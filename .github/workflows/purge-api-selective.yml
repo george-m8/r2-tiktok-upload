@@ -9,13 +9,13 @@ on:
         type: choice
         options: ["true","false"]
       purge_unmatched:
-        description: "Delete active tokens whose open_id has no tok:open:<open_id>"
+        description: "Delete active tokens with no tok:open:<open_id>"
         required: true
         default: "true"
         type: choice
         options: ["true","false"]
       dry_run:
-        description: "Dry run (show what would be deleted, but don't delete)"
+        description: "Dry run (preview only)"
         required: true
         default: "true"
         type: choice
@@ -27,12 +27,11 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN:  ${{ secrets.CF_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-      BINDING: TOKENS_KV
-      DO_PENDING:   ${{ github.event.inputs.purge_pending }}
-      DO_UNMATCHED: ${{ github.event.inputs.purge_unmatched }}
-      DRY_RUN:      ${{ github.event.inputs.dry_run }}
+      KV_NS_ID:              ${{ secrets.KV_NS_ID_TOKENS }}
+      DO_PENDING:            ${{ github.event.inputs.purge_pending }}
+      DO_UNMATCHED:          ${{ github.event.inputs.purge_unmatched }}
+      DRY_RUN:               ${{ github.event.inputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
 
@@ -43,15 +42,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Namespace: $KV_NS_ID"
+          echo "Options: pending=$DO_PENDING, unmatched=$DO_UNMATCHED, dry_run=$DRY_RUN"
 
-          echo "Binding: $BINDING"
-          echo "Options: purge_pending=$DO_PENDING, purge_unmatched=$DO_UNMATCHED, dry_run=$DRY_RUN"
+          api_keys=$(npx wrangler@latest kv:key list \
+            --namespace-id "$KV_NS_ID" \
+            --prefix "api:" | jq -r '.[].name')
 
-          # Get all api:* keys
-          api_keys=$(npx wrangler kv:key list --binding "$BINDING" \
-            | jq -r '.[] | select(.name|startswith("api:")) | .name')
-
-          if [ -z "$api_keys" ]; then
+          if [ -z "${api_keys:-}" ]; then
             echo "No api:* keys found."
             exit 0
           fi
@@ -60,30 +58,29 @@ jobs:
 
           while IFS= read -r key; do
             [ -z "$key" ] && continue
-            v=$(npx wrangler kv:key get "$key" --binding "$BINDING" || true)
-            # Skip if no value (already deleted or empty)
-            [ -z "$v" ] && continue
+            val=$(npx wrangler@latest kv:key get "$key" --namespace-id "$KV_NS_ID" || true)
+            [ -z "$val" ] && continue
 
-            status=$(echo "$v" | jq -r '.status // empty')
-            open_id=$(echo "$v" | jq -r '.open_id // empty')
+            status=$(echo "$val" | jq -r '.status // empty')
+            open_id=$(echo "$val" | jq -r '.open_id // empty')
 
-            # Pending?
+            # pending
             if [ "$DO_PENDING" = "true" ] && [ "$status" = "pending" ]; then
               to_delete+="$key"$'\n'
               continue
             fi
 
-            # Unmatched active? (active but no tok:open:<open_id>)
+            # unmatched active
             if [ "$DO_UNMATCHED" = "true" ] && [ "$status" = "active" ] && [ -n "$open_id" ]; then
               tok_key="tok:open:$open_id"
-              tok_val=$(npx wrangler kv:key get "$tok_key" --binding "$BINDING" || true)
+              tok_val=$(npx wrangler@latest kv:key get "$tok_key" --namespace-id "$KV_NS_ID" || true)
               if [ -z "$tok_val" ]; then
                 to_delete+="$key"$'\n'
               fi
             fi
           done <<< "$api_keys"
 
-          if [ -z "$to_delete" ]; then
+          if [ -z "${to_delete:-}" ]; then
             echo "Nothing to delete under the given criteria."
             exit 0
           fi
@@ -92,14 +89,14 @@ jobs:
           printf '%s\n' "$to_delete"
 
           if [ "$DRY_RUN" = "true" ]; then
-            echo "Dry run enabled. Not deleting."
+            echo "Dry run: not deleting."
             exit 0
           fi
 
-          echo "Deleting..."
+          echo "Deleting…"
           while IFS= read -r key; do
             [ -z "$key" ] && continue
-            npx wrangler kv:key delete "$key" --binding "$BINDING"
+            npx wrangler@latest kv:key delete "$key" --namespace-id "$KV_NS_ID"
           done <<< "$to_delete"
 
           echo "Done."
