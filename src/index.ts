@@ -17,6 +17,8 @@ export interface Env {
   CUSTOM_MEDIA_HOST: string;
 }
 
+const SITE_HOME = "https://tryr2media.zerotosixtycreative.co.uk";
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -97,10 +99,22 @@ function newKeyForm() {
 </head>
 <body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
   <form method="POST" class="w-full max-w-md bg-white rounded-2xl p-6 shadow">
-    <h1 class="text-2xl font-bold mb-3">Create your API key</h1>
+    <div class="flex items-center justify-between mb-3">
+      <h1 class="text-2xl font-bold">Create your API key</h1>
+      <a href="${SITE_HOME}" class="text-sm text-brandred hover:underline">Back to site</a>
+    </div>
     <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
     <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
   </form>
+
+  <script>
+    // Listen for the TikTok popup message and redirect this tab
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "tiktok-auth" && event.data.ok) {
+        location.href = "/connected-success";
+      }
+    });
+  </script>
 </body></html>`;
   return html(page);
 }
@@ -131,7 +145,7 @@ async function createKey(_req: Request, env: Env) {
     <div class="mt-6 flex gap-3">
       <a class="rounded bg-brandred text-white px-4 py-2"
          href="/login?show=${encodeURIComponent(showId)}" target="_blank" rel="noopener">Connect TikTok</a>
-      <a class="rounded border border-brandred text-brandred px-4 py-2" href="/">Back</a>
+      <a class="rounded border border-brandred text-brandred px-4 py-2" href="${SITE_HOME}">Back to home</a>
     </div>
   </div>
   <script>
@@ -157,9 +171,8 @@ function connectedSuccessPage() {
   <div class="bg-white p-8 rounded-2xl shadow text-center max-w-md w-full">
     <h1 class="text-2xl font-bold text-brandred">🎉 Connected to TikTok!</h1>
     <p class="mt-3 text-black/70">Your TikTok account is now linked. You can safely close this window or create another API key.</p>
-    <div class="mt-6 flex flex-col gap-3">
-      <a href="/keys/new" class="rounded bg-brandred text-white px-4 py-2">Create another key</a>
-      <a href="/" class="rounded border border-brandred text-brandred px-4 py-2">Go home</a>
+    <div class="mt-6">
+      <a href="${SITE_HOME}" class="rounded bg-brandred text-white px-4 py-2">Back to home</a>
     </div>
   </div>
 </body></html>`;
@@ -256,14 +269,12 @@ function renderCallbackPage(
     ${opts.details ? `<pre class="mt-4 text-left whitespace-pre-wrap break-words rounded bg-black/5 p-3 text-sm text-black/70">${opts.details}</pre>` : ''}
     ${keyBlock}
     <div class="mt-6 flex flex-col items-center gap-2">
-      <button id="closeBtn" class="rounded-lg bg-brandred px-4 py-2 text-white hover:opacity-90 transition">Close</button>
-      <p class="text-xs text-black/50">This window will close automatically.</p>
+      <a href="${SITE_HOME}" class="rounded-lg bg-brandred px-4 py-2 text-white hover:opacity-90 transition">Back to home</a>
     </div>
   </div>
   <script>
+    // Notify the opener, but do NOT auto-close this window.
     try { window.opener && window.opener.postMessage({ type: "tiktok-auth", ok: ${ok} }, "*"); } catch(e) {}
-    document.getElementById('closeBtn').addEventListener('click', () => window.close());
-    setTimeout(() => { try { window.close(); } catch(e) {} }, 2500);
   </script>
 </body></html>`;
   return html(markup, status);
