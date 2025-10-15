@@ -20,3 +20,15 @@ R2_BUCKET = "yt-relay"
 enabled = true
 head_sampling_rate = 1
 invocation_logs = true
+
+[triggers]
+# Every day at 05:00 UTC
+crons = ["0 5 * * *"]
+
+[vars]
+# Safety: start with "true" so it only logs what it *would* delete.
+PURGE_DRY_RUN = "true"
+# Pending keys older than this (hours) will be purged.
+PURGE_PENDING_MAX_HOURS = "24"
+# Toggle unmatched-active cleanup
+PURGE_REMOVE_UNMATCHED = "true"

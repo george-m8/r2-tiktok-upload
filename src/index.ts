@@ -42,8 +42,78 @@ export default {
     }
 
     return new Response("ok");
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(purgeSelective(env));
   }
 };
+
+async function purgeSelective(env: Env) {
+  const dryRun = (env as any).PURGE_DRY_RUN === "true";
+  const rmUnmatched = (env as any).PURGE_REMOVE_UNMATCHED !== "false";
+  const maxPendingHours = parseInt((env as any).PURGE_PENDING_MAX_HOURS || "24", 10);
+
+  const now = Date.now();
+  const maxPendingAgeMs = maxPendingHours * 3600 * 1000;
+
+  let cursor: string | undefined;
+  let totalChecked = 0;
+  let totalDelete = 0;
+
+  do {
+    const page = await env.TOKENS_KV.list({ prefix: "api:", cursor });
+    cursor = page.cursor || undefined;
+
+    for (const k of page.keys) {
+      totalChecked++;
+      const key = k.name;
+
+      // Read value
+      const raw = await env.TOKENS_KV.get(key);
+      if (!raw) continue;
+
+      let meta: any;
+      try { meta = JSON.parse(raw); } catch { continue; }
+
+      const status = meta.status as string | undefined;
+      const openId = meta.open_id as string | undefined;
+      const createdAt = typeof meta.created_at === "number" ? meta.created_at : 0;
+
+      let shouldDelete = false;
+      let reason = "";
+
+      // (1) Pending older than threshold
+      if (status === "pending") {
+        if (now - createdAt > maxPendingAgeMs) {
+          shouldDelete = true;
+          reason = `pending>${maxPendingHours}h`;
+        }
+      }
+
+      // (2) Active but unmatched (no corresponding tok:open:<open_id>)
+      if (!shouldDelete && rmUnmatched && status === "active" && openId) {
+        const tok = await env.TOKENS_KV.get(`tok:open:${openId}`);
+        if (!tok) {
+          shouldDelete = true;
+          reason = "active_unmatched";
+        }
+      }
+
+      if (shouldDelete) {
+        totalDelete++;
+        if (dryRun) {
+          console.log(`DRY: would delete ${key} (${reason})`);
+        } else {
+          await env.TOKENS_KV.delete(key);
+          console.log(`Deleted ${key} (${reason})`);
+        }
+      }
+    }
+  } while (cursor);
+
+  console.log(`Purge done. Checked=${totalChecked} Deleted=${totalDelete} DryRun=${(env as any).PURGE_DRY_RUN}`);
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
