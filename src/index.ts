@@ -104,15 +104,16 @@ function newKeyForm() {
 <script>tailwind.config={theme:{extend:{colors:{offwhite:'#fdf7ed',brandred:'#e6372e'},boxShadow:{soft:'0 10px 30px rgba(0,0,0,.06)'}}}}</script>
 </head>
 <body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
-  <form method="POST" class="w-full max-w-md bg-white rounded-2xl p-6 shadow">
-    <div class="flex items-center justify-between mb-3">
-      <h1 class="text-2xl font-bold">Create your API key</h1>
-    </div>
-    <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
-    <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
-    <a href="${SITE_HOME}" class="text-sm text-brandred hover:underline">Back to site</a>
-  </form>
-
+  <div class="flex items-center justify-center w-full h-full min-h-screen">
+    <form method="POST" class="w-full max-w-md bg-white rounded-2xl p-6 shadow">
+      <div class="flex items-center justify-between mb-3">
+        <h1 class="text-2xl font-bold">Create your API key</h1>
+      </div>
+      <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
+      <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
+      <a href="${SITE_HOME}" class="text-sm text-brandred hover:underline">Back to site</a>
+    </form>
+  </div>
   <script>
     // Listen for the TikTok popup message and redirect this tab
     window.addEventListener("message", (event) => {
