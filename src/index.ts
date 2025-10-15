@@ -46,6 +46,13 @@ function json(data: unknown, status = 200) {
   });
 }
 
+function html(markup: string, status = 200) {
+  return new Response(markup, {
+    status,
+    headers: { "content-type": "text/html; charset=UTF-8" }
+  });
+}
+
 async function login(_url: URL, env: Env) {
   const state = crypto.randomUUID();
   await env.TOKENS_KV.put(`state:${state}`, "1", { expirationTtl: 300 });
@@ -63,10 +70,24 @@ async function login(_url: URL, env: Env) {
 async function callback(url: URL, env: Env) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state) return json({ error: "missing code/state" }, 400);
+  if (!code || !state) {
+    return renderCallbackPage({
+      ok: false,
+      title: "Missing info",
+      message: "We couldn’t complete sign-in (code/state missing).",
+      details: "Please try again from the Connect TikTok button."
+    }, 400);
+  }
 
   const okState = await env.TOKENS_KV.get(`state:${state}`);
-  if (!okState) return json({ error: "invalid state" }, 400);
+  if (!okState) {
+    return renderCallbackPage({
+      ok: false,
+      title: "Session expired",
+      message: "Your sign-in session expired or is invalid.",
+      details: "Please try again from the Connect TikTok button."
+    }, 400);
+  }
 
   const body = new URLSearchParams({
     client_key: env.TIKTOK_CLIENT_KEY,
@@ -82,10 +103,88 @@ async function callback(url: URL, env: Env) {
     body
   });
 
-  if (!r.ok) return json({ error: "token exchange failed", detail: await safeText(r) }, 500);
-  const data = await r.json(); // includes access_token, refresh_token, open_id, expires_in
+  if (!r.ok) {
+    const detail = await safeText(r);
+    return renderCallbackPage({
+      ok: false,
+      title: "Couldn’t connect to TikTok",
+      message: "The token exchange failed.",
+      details: detail || "Please try again in a moment."
+    }, 500);
+  }
+
+  const data = await r.json(); // access_token, refresh_token, open_id, expires_in
   await env.TOKENS_KV.put("tiktok_tokens", JSON.stringify({ ...data, obtained_at: Date.now() }));
-  return new Response("Authorised. You can close this tab.");
+
+  return renderCallbackPage({
+    ok: true,
+    title: "Connected to TikTok",
+    message: "You can close this window now.",
+    details: ""
+  });
+}
+
+function renderCallbackPage(
+  opts: { ok: boolean; title: string; message: string; details?: string },
+  status = 200
+) {
+  const ok = opts.ok ? "true" : "false";
+  const markup = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>${opts.ok ? "Connected" : "Error"} • R2 TikTok Upload</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: { offwhite: '#fdf7ed', brandred: '#e6372e' },
+        boxShadow: { soft: '0 10px 30px rgba(0,0,0,0.06)' },
+        fontFamily: { sans: ['Inter','system-ui','-apple-system','Segoe UI','Roboto','Helvetica','Arial','sans-serif'] }
+      }
+    }
+  }
+</script>
+</head>
+<body class="bg-offwhite text-[#1a1a1a] font-sans min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-md rounded-2xl bg-white shadow-soft p-8 text-center">
+    <div class="mx-auto mb-4 h-12 w-12 rounded-full flex items-center justify-center ${opts.ok ? 'bg-brandred/10 text-brandred' : 'bg-red-100 text-brandred'}">
+      ${opts.ok
+        ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 14h-2v-2h2v2Zm0-4h-2V6h2v6Z"/></svg>'}
+    </div>
+
+    <h1 class="text-2xl font-bold">${opts.title}</h1>
+    <p class="mt-2 text-black/70">${opts.message}</p>
+    ${opts.details ? `<pre class="mt-4 text-left whitespace-pre-wrap break-words rounded bg-black/5 p-3 text-sm text-black/70">${escapeHtml(opts.details)}</pre>` : ''}
+
+    <div class="mt-6 flex flex-col items-center gap-2">
+      <button id="closeBtn" class="rounded-lg bg-brandred px-4 py-2 text-white hover:opacity-90 transition">Close</button>
+      <p class="text-xs text-black/50">This window will close automatically.</p>
+    </div>
+  </div>
+
+  <script>
+    // Notify opener (if any) and auto-close
+    try { window.opener && window.opener.postMessage({ type: "tiktok-auth", ok: ${ok} }, "*"); } catch(e) {}
+    document.getElementById('closeBtn').addEventListener('click', () => window.close());
+    setTimeout(() => { try { window.close(); } catch(e) {} }, 2500);
+  </script>
+</body>
+</html>`;
+  return html(markup, status);
+}
+
+// tiny HTML escaper for details block
+function escapeHtml(s = "") {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 async function webhook(req: Request, env: Env) {
