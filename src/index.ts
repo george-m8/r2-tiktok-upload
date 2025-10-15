@@ -412,6 +412,11 @@ async function webhook(req: Request, env: Env) {
     const post_info: Record<string, any> = {
       title: caption ?? "",
       privacy_level: "SELF_ONLY", // required for unaudited clients
+        "disable_duet": false,
+        "disable_stitch": false,
+        "disable_comment": false,
+        "brand_content_toggle": false,
+        "brand_organic_toggle": false
     };
     if (publishMode === "draft") {
       post_info.is_draft = true; // harmless if the tenant ignores it
