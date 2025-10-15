@@ -25,6 +25,8 @@ export default {
     if (url.pathname === "/callback") return callback(url, env);
     if (url.pathname === "/webhook" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
+    if (url.pathname === "/keys/new" && req.method === "GET") return newKeyForm();
+    if (url.pathname === "/keys/new" && req.method === "POST") return createKey(req, env);
 
     if (url.pathname === "/debug-auth") {
       return new Response(JSON.stringify({
@@ -53,9 +55,27 @@ function html(markup: string, status = 200) {
   });
 }
 
-async function login(_url: URL, env: Env) {
+function b64url(u8: Uint8Array) {
+  return btoa(String.fromCharCode(...u8))
+    .replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+async function sha256Base64Url(s: string) {
+  const enc = new TextEncoder().encode(s);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return b64url(new Uint8Array(buf));
+}
+
+async function mintApiToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return `rk_live_${b64url(bytes)}`; // shown once, we only store a hash
+}
+
+async function login(url: URL, env: Env) {
   const state = crypto.randomUUID();
-  await env.TOKENS_KV.put(`state:${state}`, "1", { expirationTtl: 300 });
+  const show = url.searchParams.get("show") || ""; // from /keys/new page
+  await env.TOKENS_KV.put(`state:${state}`, JSON.stringify({ show }), { expirationTtl: 300 });
 
   const auth = new URL(env.AUTHORIZE_URL);
   auth.searchParams.set("client_key", env.TIKTOK_CLIENT_KEY);
@@ -67,27 +87,69 @@ async function login(_url: URL, env: Env) {
   return Response.redirect(auth.toString(), 302);
 }
 
+function newKeyForm() {
+  const page = `<!doctype html><html><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Create API key • R2 TikTok Upload</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{offwhite:'#fdf7ed',brandred:'#e6372e'},boxShadow:{soft:'0 10px 30px rgba(0,0,0,.06)'}}}}</script>
+</head>
+<body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
+  <form method="POST" class="w-full max-w-md bg-white rounded-2xl p-6 shadow">
+    <h1 class="text-2xl font-bold mb-3">Create your API key</h1>
+    <p class="text-black/70 mb-4">We’ll generate a secure key and show it once. Then you’ll connect TikTok.</p>
+    <button class="w-full rounded bg-brandred text-white px-4 py-2">Create key</button>
+  </form>
+</body></html>`;
+  return html(page);
+}
+
+async function createKey(_req: Request, env: Env) {
+  const raw = await mintApiToken();
+  const hash = await sha256Base64Url(raw);
+  const showId = crypto.randomUUID();
+  const now = Date.now();
+
+  // mark pending
+  await env.TOKENS_KV.put(`api:${hash}`, JSON.stringify({ status: "pending", created_at: now }));
+  // one-time stash to show again on callback
+  await env.TOKENS_KV.put(`showkey:${showId}`, raw, { expirationTtl: 600 });
+
+  const page = `<!doctype html><html><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Your API key • R2 TikTok Upload</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{offwhite:'#fdf7ed',brandred:'#e6372e'}}}}</script>
+</head>
+<body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-xl bg-white rounded-2xl p-6 shadow">
+    <h1 class="text-2xl font-bold">API key created</h1>
+    <p class="text-black/70 mt-2">Copy and store this key securely. You’ll use it as the <code>X-Api-Key</code> header.</p>
+    <pre class="mt-4 rounded bg-black/90 text-white p-4 select-all text-sm overflow-x-auto">${raw}</pre>
+    <p class="mt-1 text-xs text-black/60">Shown once. We only store a secure hash.</p>
+    <div class="mt-6 flex gap-3">
+      <a class="rounded bg-brandred text-white px-4 py-2"
+         href="/login?show=${encodeURIComponent(showId)}" target="_blank" rel="noopener">Connect TikTok</a>
+      <a class="rounded border border-brandred text-brandred px-4 py-2" href="/">Back</a>
+    </div>
+  </div>
+</body></html>`;
+  return html(page);
+}
+
 async function callback(url: URL, env: Env) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   if (!code || !state) {
-    return renderCallbackPage({
-      ok: false,
-      title: "Missing info",
-      message: "We couldn’t complete sign-in (code/state missing).",
-      details: "Please try again from the Connect TikTok button."
-    }, 400);
+    return renderCallbackPage({ ok:false, title:"Missing info", message:"Code/state missing.", details:"Try Connect TikTok again." }, 400);
   }
 
-  const okState = await env.TOKENS_KV.get(`state:${state}`);
-  if (!okState) {
-    return renderCallbackPage({
-      ok: false,
-      title: "Session expired",
-      message: "Your sign-in session expired or is invalid.",
-      details: "Please try again from the Connect TikTok button."
-    }, 400);
+  const stateRaw = await env.TOKENS_KV.get(`state:${state}`);
+  if (!stateRaw) {
+    return renderCallbackPage({ ok:false, title:"Session expired", message:"Sign-in session expired.", details:"Try Connect TikTok again." }, 400);
   }
+  let info: { show?: string } = {};
+  try { info = JSON.parse(stateRaw || "{}"); } catch {}
 
   const body = new URLSearchParams({
     client_key: env.TIKTOK_CLIENT_KEY,
@@ -105,48 +167,53 @@ async function callback(url: URL, env: Env) {
 
   if (!r.ok) {
     const detail = await safeText(r);
-    return renderCallbackPage({
-      ok: false,
-      title: "Couldn’t connect to TikTok",
-      message: "The token exchange failed.",
-      details: detail || "Please try again in a moment."
-    }, 500);
+    return renderCallbackPage({ ok:false, title:"Couldn’t connect to TikTok", message:"The token exchange failed.", details: detail || "Please try again." }, 500);
   }
 
   const data = await r.json(); // access_token, refresh_token, open_id, expires_in
-  await env.TOKENS_KV.put("tiktok_tokens", JSON.stringify({ ...data, obtained_at: Date.now() }));
+  // store tokens per TikTok account
+  await env.TOKENS_KV.put(`tok:open:${data.open_id}`, JSON.stringify({ ...data, obtained_at: Date.now() }));
+
+  // If we carried a show-id, reveal key once more and activate it
+  let showKey = "";
+  if (info.show) {
+    showKey = await env.TOKENS_KV.get(`showkey:${info.show}`) || "";
+    if (showKey) {
+      await env.TOKENS_KV.delete(`showkey:${info.show}`);
+      const hash = await sha256Base64Url(showKey);
+      await env.TOKENS_KV.put(`api:${hash}`, JSON.stringify({
+        status: "active",
+        open_id: data.open_id,
+        created_at: Date.now()
+      }));
+    }
+  }
 
   return renderCallbackPage({
     ok: true,
     title: "Connected to TikTok",
     message: "You can close this window now.",
-    details: ""
+    details: "",
+    apiKeyOnce: showKey
   });
 }
 
 function renderCallbackPage(
-  opts: { ok: boolean; title: string; message: string; details?: string },
+  opts: { ok: boolean; title: string; message: string; details?: string; apiKeyOnce?: string },
   status = 200
 ) {
   const ok = opts.ok ? "true" : "false";
-  const markup = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  const keyBlock = opts.apiKeyOnce
+    ? `<h2 class="text-lg font-semibold mt-6">Your API key (save this)</h2>
+       <pre class="mt-2 rounded bg-black/90 text-white p-3 select-all text-sm">${opts.apiKeyOnce}</pre>
+       <p class="text-xs text-black/60 mt-1">Shown once. We only store a secure hash.</p>`
+    : "";
+
+  const markup = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${opts.ok ? "Connected" : "Error"} • R2 TikTok Upload</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: { offwhite: '#fdf7ed', brandred: '#e6372e' },
-        boxShadow: { soft: '0 10px 30px rgba(0,0,0,0.06)' },
-        fontFamily: { sans: ['Inter','system-ui','-apple-system','Segoe UI','Roboto','Helvetica','Arial','sans-serif'] }
-      }
-    }
-  }
-</script>
+<script>tailwind.config={theme:{extend:{colors:{offwhite:'#fdf7ed',brandred:'#e6372e'},boxShadow:{soft:'0 10px 30px rgba(0,0,0,.06)'}}}}</script>
 </head>
 <body class="bg-offwhite text-[#1a1a1a] font-sans min-h-screen flex items-center justify-center p-6">
   <div class="w-full max-w-md rounded-2xl bg-white shadow-soft p-8 text-center">
@@ -155,24 +222,21 @@ function renderCallbackPage(
         ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'
         : '<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 14h-2v-2h2v2Zm0-4h-2V6h2v6Z"/></svg>'}
     </div>
-
     <h1 class="text-2xl font-bold">${opts.title}</h1>
     <p class="mt-2 text-black/70">${opts.message}</p>
-    ${opts.details ? `<pre class="mt-4 text-left whitespace-pre-wrap break-words rounded bg-black/5 p-3 text-sm text-black/70">${escapeHtml(opts.details)}</pre>` : ''}
-
+    ${opts.details ? `<pre class="mt-4 text-left whitespace-pre-wrap break-words rounded bg-black/5 p-3 text-sm text-black/70">${opts.details}</pre>` : ''}
+    ${keyBlock}
     <div class="mt-6 flex flex-col items-center gap-2">
       <button id="closeBtn" class="rounded-lg bg-brandred px-4 py-2 text-white hover:opacity-90 transition">Close</button>
+      <p class="text-xs text-black/50">This window will close automatically.</p>
     </div>
   </div>
-
   <script>
-    // Notify opener (if any) and auto-close
     try { window.opener && window.opener.postMessage({ type: "tiktok-auth", ok: ${ok} }, "*"); } catch(e) {}
     document.getElementById('closeBtn').addEventListener('click', () => window.close());
     setTimeout(() => { try { window.close(); } catch(e) {} }, 2500);
   </script>
-</body>
-</html>`;
+</body></html>`;
   return html(markup, status);
 }
 
@@ -187,10 +251,17 @@ function escapeHtml(s = "") {
 }
 
 async function webhook(req: Request, env: Env) {
-  // 1) Simple auth (as you had)
-  if (env.POST_API_KEY && req.headers.get("X-Api-Key") !== env.POST_API_KEY) {
-    return json({ ok: false, error: "unauthorised" }, 401);
+  // API key auth (no usernames)
+  const apiKey = req.headers.get("X-Api-Key") || "";
+  if (!apiKey) return json({ ok:false, error:"missing X-Api-Key" }, 401);
+  const hash = await sha256Base64Url(apiKey);
+  const apiMetaRaw = await env.TOKENS_KV.get(`api:${hash}`);
+  if (!apiMetaRaw) return json({ ok:false, error:"unauthorised" }, 401);
+  const apiMeta = tryParse(apiMetaRaw) || {};
+  if (apiMeta.status !== "active" || !apiMeta.open_id) {
+    return json({ ok:false, error:"api key not activated (connect TikTok first)" }, 401);
   }
+  const openId: string = apiMeta.open_id;
 
   // 2) Parse body (accept id OR url/r2Url; caption + idempotencyKey optional)
   const body = await req.json().catch(() => ({}));
@@ -203,7 +274,7 @@ async function webhook(req: Request, env: Env) {
 
   // 3) Idempotency (keep your existing logic)
   if (idempotencyKey) {
-    const existed = await env.TOKENS_KV.get(`idem:${idempotencyKey}`);
+    const existed = await env.TOKENS_KV.get(`idem:${openId}:${idempotencyKey}`);
     if (existed) return json(JSON.parse(existed));
   }
 
@@ -222,7 +293,7 @@ async function webhook(req: Request, env: Env) {
     });
 
     // 5) TikTok call (build post_info from mode)
-    const access = await getAccessToken(env);
+    const access = await getAccessTokenFor(env, `tok:open:${openId}`);
 
     // Force private in unaudited/sandbox; allow a draft toggle
     const post_info: Record<string, any> = {
@@ -269,28 +340,34 @@ async function webhook(req: Request, env: Env) {
     }
 
     if (idempotencyKey) {
-      await env.TOKENS_KV.put(`idem:${idempotencyKey}`, JSON.stringify(result), {
-        expirationTtl: 86400,
-      });
+      await env.TOKENS_KV.put(
+        `idem:${openId}:${idempotencyKey}`,
+        JSON.stringify(result),
+        { expirationTtl: 86400 }
+      );
     }
     return json(result, initResp.ok ? 200 : 400);
+
   } catch (err: any) {
     const result = { ok: false, error: String(err) };
     if (idempotencyKey) {
-      await env.TOKENS_KV.put(`idem:${idempotencyKey}`, JSON.stringify(result), { expirationTtl: 86400 });
+      await env.TOKENS_KV.put(
+        `idem:${openId}:${idempotencyKey}`,
+        JSON.stringify(result),
+        { expirationTtl: 86400 }
+      );
     }
     return json(result, 500);
   }
 }
 
-async function getAccessToken(env: Env): Promise<string> {
-  const raw = await env.TOKENS_KV.get("tiktok_tokens");
-  if (!raw) throw new Error("Not authorised. Visit /login first.");
+async function getAccessTokenFor(env: Env, kvKey: string): Promise<string> {
+  const raw = await env.TOKENS_KV.get(kvKey);
+  if (!raw) throw new Error("Not authorised for this account. Connect TikTok first.");
   let tok = JSON.parse(raw);
   const issuedAt = tok.obtained_at ?? Date.now();
   const expiresIn = tok.expires_in ?? 3600;
   const expiresAt = issuedAt + (expiresIn - 120) * 1000; // refresh 2 min early
-
   if (Date.now() < expiresAt && tok.access_token) return tok.access_token;
 
   const body = new URLSearchParams({
@@ -299,17 +376,15 @@ async function getAccessToken(env: Env): Promise<string> {
     grant_type: "refresh_token",
     refresh_token: tok.refresh_token
   });
-
   const r = await fetch(env.TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body
   });
-
   if (!r.ok) throw new Error(`Refresh failed: ${await safeText(r)}`);
   const data = await r.json();
-  tok = { ...data, obtained_at: Date.now() };
-  await env.TOKENS_KV.put("tiktok_tokens", JSON.stringify(tok));
+  tok = { ...tok, ...data, obtained_at: Date.now() };
+  await env.TOKENS_KV.put(kvKey, JSON.stringify(tok));
   return tok.access_token;
 }
 
