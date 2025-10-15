@@ -2,7 +2,11 @@ name: Deploy Worker
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+    paths:
+      - 'src/**'
+      - 'wrangler.toml'
+      - 'package.json'
+      - 'package-lock.json'
 
 jobs:
   deploy:
