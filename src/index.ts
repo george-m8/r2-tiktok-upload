@@ -23,6 +23,7 @@ export default {
 
     if (url.pathname === "/login") return login(url, env);
     if (url.pathname === "/callback") return callback(url, env);
+    if (url.pathname === "/connected-success") return connectedSuccessPage(); 
     if (url.pathname === "/webhook" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/post" && req.method === "POST") return webhook(req, env);
     if (url.pathname === "/keys/new" && req.method === "GET") return newKeyForm();
@@ -131,6 +132,34 @@ async function createKey(_req: Request, env: Env) {
       <a class="rounded bg-brandred text-white px-4 py-2"
          href="/login?show=${encodeURIComponent(showId)}" target="_blank" rel="noopener">Connect TikTok</a>
       <a class="rounded border border-brandred text-brandred px-4 py-2" href="/">Back</a>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "tiktok-auth" && event.data.ok) {
+        // redirect within the same Worker
+        location.href = "/connected-success";
+      }
+    });
+  </script>
+</body></html>`;
+  return html(page);
+}
+
+function connectedSuccessPage() {
+  const page = `<!doctype html><html><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Connected • R2 TikTok Upload</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{colors:{offwhite:'#fdf7ed',brandred:'#e6372e'},boxShadow:{soft:'0 10px 30px rgba(0,0,0,.06)'}}}}</script>
+</head>
+<body class="bg-offwhite min-h-screen flex items-center justify-center p-6">
+  <div class="bg-white p-8 rounded-2xl shadow text-center max-w-md w-full">
+    <h1 class="text-2xl font-bold text-brandred">🎉 Connected to TikTok!</h1>
+    <p class="mt-3 text-black/70">Your TikTok account is now linked. You can safely close this window or create another API key.</p>
+    <div class="mt-6 flex flex-col gap-3">
+      <a href="/keys/new" class="rounded bg-brandred text-white px-4 py-2">Create another key</a>
+      <a href="/" class="rounded border border-brandred text-brandred px-4 py-2">Go home</a>
     </div>
   </div>
 </body></html>`;
