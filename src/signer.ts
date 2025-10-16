@@ -1,6 +1,5 @@
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { EndpointV2 } from "@aws-sdk/types";
 
 export function makeSigner(env: {
   R2_ACCESS_KEY_ID: string;
@@ -8,19 +7,21 @@ export function makeSigner(env: {
   R2_BUCKET: string;
   CUSTOM_MEDIA_HOST: string;   // e.g. r2media.example.com (bucket-bound to this bucket)
 }) {
-  // Use EndpointV2 instead of a URL string to avoid "Invalid URL string" in Workers
-  const endpoint: EndpointV2 = {
-    protocol: "https",
-    hostname: env.CUSTOM_MEDIA_HOST, // this host is already mapped to the bucket
-    path: "/",                        // IMPORTANT: no bucket segment here
-    port: 443,
-  };
+  // Sanitize CUSTOM_MEDIA_HOST: strip scheme and trailing slash
+  const host = env.CUSTOM_MEDIA_HOST
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .trim();
+
+  // Use a plain string endpoint; some SDK builds are picky about EndpointV2.protocol
+  const endpoint = `https://${host}`;
 
   const client = new S3Client({
     region: "auto",
-    endpoint,              // <- EndpointV2 object
-    bucketEndpoint: true,  // <- tells the SDK the host is already bucket-scoped
-    forcePathStyle: false, // <- do NOT prefix /Bucket
+    endpoint,              // plain string endpoint
+    bucketEndpoint: true,  // host is already bucket-bound
+    forcePathStyle: false, // do NOT prefix /Bucket
+    tls: true,
     credentials: {
       accessKeyId: env.R2_ACCESS_KEY_ID,
       secretAccessKey: env.R2_SECRET_ACCESS_KEY,
@@ -31,7 +32,7 @@ export function makeSigner(env: {
     return {
       endpoint,
       bucket: env.R2_BUCKET,
-      host: env.CUSTOM_MEDIA_HOST,
+      host,
       bucketEndpoint: true,
       forcePathStyle: false,
     };
