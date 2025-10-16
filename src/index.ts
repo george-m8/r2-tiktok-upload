@@ -20,17 +20,34 @@ export interface Env {
 
 const SITE_HOME = "https://tryr2media.zerotosixtycreative.co.uk";
 
-const BUILD = {
-  ts: new Date().toISOString(),
-  nonce:
-    typeof crypto?.randomUUID === "function"
-      ? crypto.randomUUID()
-      : String(Math.random()),
-};
+// top-level (safe)
+let BUILD: { ts: string; nonce: string } | undefined;
 
+function getBuildMeta() {
+  if (!BUILD) {
+    // This runs the first time you call it from inside fetch()
+    const uuid = (globalThis.crypto as any)?.randomUUID?.() ??
+                 `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    BUILD = {
+      ts: new Date().toISOString(),
+      nonce: uuid,
+    };
+  }
+  return BUILD;
+}
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req, env, ctx) {
+    // If you need it for a route (e.g. /__version):
     const url = new URL(req.url);
+    if (url.pathname === "/__version") {
+      const b = getBuildMeta();
+      return new Response("ok", {
+        headers: {
+          "x-build-ts": b.ts,
+          "x-build-nonce": b.nonce,
+        }
+      });
+    }
 
     if (url.pathname === "/login") return login(url, env);
     if (url.pathname === "/callback") return callback(url, env);
@@ -71,70 +88,34 @@ export default {
           R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
           R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
           R2_BUCKET: env.R2_BUCKET,
-          CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST
+          CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
         });
 
-        const desc = (signer as any).describe?.() ?? {};
-        let key: string | undefined;
-        if (id) key = `${id}.mp4`;
-        else if (rawUrl) key = (signer as any).extractKeyFromUrl(rawUrl);
+        // Compute the key exactly as resolveAndSign would
+        const key = id ? `${id}.mp4` : signer.extractKeyFromUrl(rawUrl!);
 
-        if (!key) return json({ ok: false, error: "could not derive key from input" }, 400);
+        // Show everything we can before we even call the SDK
+        const preflight = {
+          env: {
+            CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
+            R2_BUCKET: env.R2_BUCKET,
+          },
+          signerDebug: signer._debug,
+          derivedKey: key,
+          exampleFinalUrl: signer._debug.sampleUrlFor(key),
+        };
 
-        const base = String(desc.endpoint || `https://${env.CUSTOM_MEDIA_HOST}`).replace(/\/+$/, "");
-        const unsigned = `${base}/${key}`;
+        // Now try to sign
+        const signed = await signer.resolveAndSign({ id, url: rawUrl });
+        return json({ ok: true, preflight, signed });
 
-        // Probe unsigned URL
-        let head: any = null;
-        let range: any = null;
-        try {
-          const hr = await fetch(unsigned, { method: "HEAD" });
-          head = {
-            status: hr.status,
-            "content-type": hr.headers.get("content-type"),
-            "content-length": hr.headers.get("content-length"),
-            "accept-ranges": hr.headers.get("accept-ranges"),
-            "cf-ray": hr.headers.get("cf-ray"),
-          };
-        } catch (e: any) {
-          head = { error: String(e) };
-        }
-        try {
-          const rr = await fetch(unsigned, { headers: { Range: "bytes=0-0" } });
-          range = { status: rr.status };
-        } catch (e: any) {
-          range = { error: String(e) };
-        }
-
-        // Try presign
-        let signedUrl: string | undefined;
-        let presignError: any = null;
-        try {
-          signedUrl = await (signer as any).resolveAndSign({ id, url: rawUrl });
-        } catch (e: any) {
-          presignError = { name: e?.name, message: e?.message || String(e), stack: e?.stack };
-        }
-
-        return json({
-          ok: !presignError,
-          input: { id, url: rawUrl },
-          env: { CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST, R2_BUCKET: env.R2_BUCKET },
-          signer: desc,
-          derived: { key, unsigned },
-          probe: { head, range },
-          presign: presignError ? { error: presignError } : { url: signedUrl }
-        }, presignError ? 500 : 200);
       } catch (e: any) {
-        return json({ ok: false, error: String(e), stack: e?.stack }, 500);
+        return json({
+          ok: false,
+          error: e?.message || String(e),
+          stack: e?.stack,
+        }, 500);
       }
-    }
-
-    if (url.pathname === "/__version") {
-      return json({
-        ok: true,
-        build: BUILD,
-        env: { CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST, R2_BUCKET: env.R2_BUCKET },
-      });
     }
 
     return new Response("ok");
@@ -211,14 +192,15 @@ async function purgeSelective(env: Env) {
   console.log(`Purge done. Checked=${totalChecked} Deleted=${totalDelete} DryRun=${(env as any).PURGE_DRY_RUN}`);
 }
 
-function json(data: unknown, status = 200) {
+function json(data: unknown, status = 200, build?: { ts: string; nonce: string }) {
+  const b = build ?? getBuildMeta(); // lazy init inside handler
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "content-type": "application/json",
       "cache-control": "no-store, no-cache, must-revalidate",
-      "x-build-ts": BUILD.ts,
-      "x-build-nonce": BUILD.nonce,
+      "x-build-ts": b.ts,
+      "x-build-nonce": b.nonce,
     },
   });
 }
