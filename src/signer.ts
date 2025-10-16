@@ -25,17 +25,15 @@ export function makeSigner(env: {
 
   function extractKeyFromUrl(rawUrl: string) {
     const u = new URL(rawUrl);
-    // remove leading slash(es)
-    let path = u.pathname.replace(/^\/+/, "");
+    let path = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
 
-    // If old R2 endpoint style = /bucket/key... → drop the bucket segment
-    if (u.hostname.endsWith(".r2.cloudflarestorage.com")) {
-      const parts = path.split("/");
-      if (parts[0] === env.R2_BUCKET) parts.shift();
-      path = parts.join("/");
+    // Remove the bucket segment if it's there (works for both .r2.cloudflarestorage.com and custom domains)
+    const bucketPrefix = env.R2_BUCKET + "/";
+    if (path.startsWith(bucketPrefix)) {
+        path = path.slice(bucketPrefix.length);
     }
-    // If already on custom domain, path is just "key" (no bucket prefix)
-    return decodeURIComponent(path);
+
+    return path;
   }
 
   /** Accepts an ID (uses `${id}.mp4`) or any R2 URL (old or custom host). */
