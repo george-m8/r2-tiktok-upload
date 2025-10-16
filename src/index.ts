@@ -82,7 +82,7 @@ export default {
       try {
         const id = url.searchParams.get("id") || undefined;
         const rawUrl = url.searchParams.get("url") || undefined;
-        if (!id && !rawUrl) return json({ ok: false, error: "pass id= or url=" }, 400);
+        if (!id && !rawUrl) return json({ error: "pass id= or url=" }, 400);
 
         const signer = makeSigner({
           R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
@@ -91,30 +91,10 @@ export default {
           CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
         });
 
-        // Compute the key exactly as resolveAndSign would
-        const key = id ? `${id}.mp4` : signer.extractKeyFromUrl(rawUrl!);
-
-        // Show everything we can before we even call the SDK
-        const preflight = {
-          env: {
-            CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
-            R2_BUCKET: env.R2_BUCKET,
-          },
-          signerDebug: signer._debug,
-          derivedKey: key,
-          exampleFinalUrl: signer._debug.sampleUrlFor(key),
-        };
-
-        // Now try to sign
         const signed = await signer.resolveAndSign({ id, url: rawUrl });
-        return json({ ok: true, preflight, signed });
-
+        return json({ ok: true, signed });
       } catch (e: any) {
-        return json({
-          ok: false,
-          error: e?.message || String(e),
-          stack: e?.stack,
-        }, 500);
+        return json({ ok: false, error: String(e), stack: e?.stack }, 500);
       }
     }
 
