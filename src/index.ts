@@ -62,14 +62,28 @@ export default {
       });
     }
 
+    if (url.pathname === "/debug-env") {
+      return new Response(JSON.stringify({
+        CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
+        R2_BUCKET: env.R2_BUCKET
+      }, null, 2), { headers: { "content-type": "application/json" }});
+    }
+
     if (url.pathname === "/debug-signer") {
       try {
-        const signer = makeSigner(env);
         const id = url.searchParams.get("id") || "Cli_HAYZm_s";
+        const signer = makeSigner(env);
         const signed = await signer.resolveAndSign({ id });
-        return json({ endpoint: env.CUSTOM_MEDIA_HOST, id, signed });
+        return new Response(JSON.stringify({
+          host: env.CUSTOM_MEDIA_HOST,
+          bucket: env.R2_BUCKET,
+          id,
+          signed
+        }, null, 2), { headers: { "content-type": "application/json" }});
       } catch (e:any) {
-        return json({ error: String(e) }, 500);
+        return new Response(JSON.stringify({ error: String(e) }, null, 2), {
+          status: 500, headers: { "content-type": "application/json" }
+        });
       }
     }
 
