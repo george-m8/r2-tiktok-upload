@@ -20,6 +20,14 @@ export interface Env {
 
 const SITE_HOME = "https://tryr2media.zerotosixtycreative.co.uk";
 
+const BUILD = {
+  ts: new Date().toISOString(),
+  nonce:
+    typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : String(Math.random()),
+};
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -121,6 +129,14 @@ export default {
       }
     }
 
+    if (url.pathname === "/__version") {
+      return json({
+        ok: true,
+        build: BUILD,
+        env: { CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST, R2_BUCKET: env.R2_BUCKET },
+      });
+    }
+
     return new Response("ok");
   },
 
@@ -198,7 +214,12 @@ async function purgeSelective(env: Env) {
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json" }
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store, no-cache, must-revalidate",
+      "x-build-ts": BUILD.ts,
+      "x-build-nonce": BUILD.nonce,
+    },
   });
 }
 
