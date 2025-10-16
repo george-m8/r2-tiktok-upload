@@ -53,22 +53,6 @@ export default {
       });
     }
 
-    if (url.pathname === "/debug-auth") {
-      return new Response(JSON.stringify({
-        redirect_uri: env.OAUTH_REDIRECT_URL,
-        authorize_url: env.AUTHORIZE_URL,
-      }, null, 2), {
-        headers: { "content-type": "application/json" }
-      });
-    }
-
-    if (url.pathname === "/debug-env") {
-      return new Response(JSON.stringify({
-        CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST,
-        R2_BUCKET: env.R2_BUCKET
-      }, null, 2), { headers: { "content-type": "application/json" }});
-    }
-
     if (url.pathname === "/debug-signer") {
       try {
         const id = url.searchParams.get("id") || undefined;
@@ -82,11 +66,58 @@ export default {
           CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST
         });
 
-        const signed = await signer.resolveAndSign({ id, url: rawUrl });
-        const impl = (signer as any).describe ? (signer as any).describe() : {};
-        return json({ ok: true, signed, impl });
+        const desc = (signer as any).describe?.() ?? {};
+        let key: string | undefined;
+        if (id) key = `${id}.mp4`;
+        else if (rawUrl) key = (signer as any).extractKeyFromUrl(rawUrl);
+
+        if (!key) return json({ ok: false, error: "could not derive key from input" }, 400);
+
+        const base = String(desc.endpoint || `https://${env.CUSTOM_MEDIA_HOST}`).replace(/\/+$/, "");
+        const unsigned = `${base}/${key}`;
+
+        // Probe unsigned URL
+        let head: any = null;
+        let range: any = null;
+        try {
+          const hr = await fetch(unsigned, { method: "HEAD" });
+          head = {
+            status: hr.status,
+            "content-type": hr.headers.get("content-type"),
+            "content-length": hr.headers.get("content-length"),
+            "accept-ranges": hr.headers.get("accept-ranges"),
+            "cf-ray": hr.headers.get("cf-ray"),
+          };
+        } catch (e: any) {
+          head = { error: String(e) };
+        }
+        try {
+          const rr = await fetch(unsigned, { headers: { Range: "bytes=0-0" } });
+          range = { status: rr.status };
+        } catch (e: any) {
+          range = { error: String(e) };
+        }
+
+        // Try presign
+        let signedUrl: string | undefined;
+        let presignError: any = null;
+        try {
+          signedUrl = await (signer as any).resolveAndSign({ id, url: rawUrl });
+        } catch (e: any) {
+          presignError = { name: e?.name, message: e?.message || String(e), stack: e?.stack };
+        }
+
+        return json({
+          ok: !presignError,
+          input: { id, url: rawUrl },
+          env: { CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST, R2_BUCKET: env.R2_BUCKET },
+          signer: desc,
+          derived: { key, unsigned },
+          probe: { head, range },
+          presign: presignError ? { error: presignError } : { url: signedUrl }
+        }, presignError ? 500 : 200);
       } catch (e: any) {
-        return json({ ok: false, error: String(e) }, 500);
+        return json({ ok: false, error: String(e), stack: e?.stack }, 500);
       }
     }
 
