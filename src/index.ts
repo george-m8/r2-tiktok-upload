@@ -62,6 +62,17 @@ export default {
       });
     }
 
+    if (url.pathname === "/debug-signer") {
+      try {
+        const signer = makeSigner(env);
+        const id = url.searchParams.get("id") || "Cli_HAYZm_s";
+        const signed = await signer.resolveAndSign({ id });
+        return json({ endpoint: env.CUSTOM_MEDIA_HOST, id, signed });
+      } catch (e:any) {
+        return json({ error: String(e) }, 500);
+      }
+    }
+
     return new Response("ok");
   },
 
