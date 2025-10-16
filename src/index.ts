@@ -71,19 +71,21 @@ export default {
 
     if (url.pathname === "/debug-signer") {
       try {
-        const id = url.searchParams.get("id") || "Cli_HAYZm_s";
-        const signer = makeSigner(env);
-        const signed = await signer.resolveAndSign({ id });
-        return new Response(JSON.stringify({
-          host: env.CUSTOM_MEDIA_HOST,
-          bucket: env.R2_BUCKET,
-          id,
-          signed
-        }, null, 2), { headers: { "content-type": "application/json" }});
-      } catch (e:any) {
-        return new Response(JSON.stringify({ error: String(e) }, null, 2), {
-          status: 500, headers: { "content-type": "application/json" }
+        const id = url.searchParams.get("id") || undefined;
+        const rawUrl = url.searchParams.get("url") || undefined;
+        if (!id && !rawUrl) return json({ error: "pass id= or url=" }, 400);
+
+        const signer = makeSigner({
+          R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+          R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+          R2_BUCKET: env.R2_BUCKET,
+          CUSTOM_MEDIA_HOST: env.CUSTOM_MEDIA_HOST
         });
+
+        const signed = await signer.resolveAndSign({ id, url: rawUrl });
+        return json({ ok: true, signed });
+      } catch (e: any) {
+        return json({ ok: false, error: String(e) }, 500);
       }
     }
 
