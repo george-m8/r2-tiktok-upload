@@ -73,7 +73,7 @@ export default {
       try {
         const id = url.searchParams.get("id") || undefined;
         const rawUrl = url.searchParams.get("url") || undefined;
-        if (!id && !rawUrl) return json({ error: "pass id= or url=" }, 400);
+        if (!id && !rawUrl) return json({ ok: false, error: "pass id= or url=" }, 400);
 
         const signer = makeSigner({
           R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
@@ -83,7 +83,8 @@ export default {
         });
 
         const signed = await signer.resolveAndSign({ id, url: rawUrl });
-        return json({ ok: true, signed });
+        const impl = (signer as any).describe ? (signer as any).describe() : {};
+        return json({ ok: true, signed, impl });
       } catch (e: any) {
         return json({ ok: false, error: String(e) }, 500);
       }
@@ -427,7 +428,10 @@ async function webhook(req: Request, env: Env, opts: { dry?: boolean } = {}) {
   // 2) Parse body (accept id OR url/r2Url; caption + idempotencyKey optional)
   const body = await req.json().catch(() => ({}));
   const { id, r2Url, url, caption, idempotencyKey, mode } = body;
+  const cleanCaption = (caption ?? "").replace(/\u0000/g, ""); // strip NULs
   const publishMode = (mode ?? "publish").toLowerCase();
+
+  
 
   if (!id && !r2Url && !url) {
     return json({ ok: false, error: "Provide 'id' or 'r2Url'/'url'" }, 400);
@@ -455,7 +459,7 @@ async function webhook(req: Request, env: Env, opts: { dry?: boolean } = {}) {
     const access = await getAccessTokenFor(env, `tok:open:${openId}`);
 
     const post_info: Record<string, any> = {
-      title: caption ?? "",
+      title: cleanCaption,
       privacy_level: "SELF_ONLY",
       disable_duet: false,
       disable_stitch: false,
